@@ -1,0 +1,106 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License
+ * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+ * or implied. See the License for the specific language governing permissions and limitations under
+ * the License.
+ */
+
+
+plugins {
+  id 'standard-subproject-configuration'
+  id 'geode-publish-java'
+  id 'warnings'
+  id 'jmh'
+}
+
+// GEODE-10543: Configure GraalVM annotation processor options for Log4j 2.25.3
+// Log4j 2.25.3 includes a GraalVM Reachability Metadata annotation processor that generates
+// plugin descriptors for native image compilation. Without these options, the processor emits
+// warnings about missing Maven coordinates, which are treated as compilation errors by Gradle.
+//
+// These options specify the Maven coordinates (groupId:artifactId) for the generated plugin
+// descriptors, suppressing the warnings and allowing compilation to succeed.
+//
+// Apply only to main source compilation, as integration tests don't trigger the annotation processor.
+//
+// Reference: https://issues.apache.org/jira/browse/LOG4J2-3642
+tasks.named('compileJava').configure {
+  options.compilerArgs += [
+    '-Alog4j.graalvm.groupId=org.apache.geode',
+    '-Alog4j.graalvm.artifactId=geode-log4j'
+  ]
+}
+
+dependencies {
+  api(platform(project(':boms:geode-all-bom')))
+
+  implementation(project(':geode-core'))
+  implementation(project(':geode-logging'))
+  implementation('org.apache.commons:commons-lang3')
+
+  implementation('org.apache.logging.log4j:log4j-api')
+  implementation('org.apache.logging.log4j:log4j-core')
+
+  //This routes slf4j logs to log4j. Shiro and micrometer use slf4j
+  runtimeOnly('org.apache.logging.log4j:log4j-slf4j-impl') {
+    exclude module: 'slf4j-api'
+    ext.optional = true
+  }
+  //This routes commons logging logs to log4j. Several apache commons dependencies use commons logging
+  runtimeOnly('org.apache.logging.log4j:log4j-jcl') {
+    ext.optional = true
+  }
+  //This routes jdk logs to log4j. Several dependencies use JDK logs (jackson, jaxb, ...)
+  runtimeOnly('org.apache.logging.log4j:log4j-jul') {
+    ext.optional = true
+  }
+
+  jmhImplementation(project(':geode-junit')) {
+    exclude module: 'geode-core'
+  }
+  jmhImplementation('junit:junit')
+  jmhImplementation('org.assertj:assertj-core')
+  jmhImplementation('org.mockito:mockito-core')
+
+  testImplementation(project(':geode-junit')) {
+    exclude module: 'geode-core'
+  }
+  testImplementation('junit:junit')
+  testImplementation('org.assertj:assertj-core')
+  testImplementation('org.mockito:mockito-core')
+
+  integrationTestImplementation(project(':geode-junit')) {
+    exclude module: 'geode-core'
+  }
+  integrationTestImplementation('junit:junit')
+  // Log4j 2.20.0+ moved test utilities to log4j-core-test with new package names:
+  // org.apache.logging.log4j.junit → org.apache.logging.log4j.core.test.junit
+  // org.apache.logging.log4j.test → org.apache.logging.log4j.core.test
+  // log4j-core-test 2.25.4 transitively depends on assertj-core 3.27.3, but Geode's
+  // custom AssertJ assertions were built against 3.22.0. Force 3.22.0 to avoid
+  // NoSuchMethodError: CommonValidations.failIfEmptySinceActualIsNotEmpty
+  integrationTestImplementation('org.apache.logging.log4j:log4j-core-test') {
+    exclude group: 'org.assertj', module: 'assertj-core'
+  }
+  integrationTestImplementation('org.assertj:assertj-core')
+
+  distributedTestImplementation(project(':geode-junit')) {
+    exclude module: 'geode-core'
+  }
+  distributedTestImplementation('commons-io:commons-io')
+  distributedTestImplementation('junit:junit')
+  distributedTestImplementation('org.apache.commons:commons-lang3')
+  distributedTestImplementation('org.assertj:assertj-core')
+  distributedTestImplementation('org.awaitility:awaitility')
+  distributedTestImplementation('org.hamcrest:hamcrest')
+  distributedTestImplementation('org.mockito:mockito-core')
+  distributedTestImplementation('pl.pragmatists:JUnitParams')
+}
